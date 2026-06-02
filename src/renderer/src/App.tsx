@@ -5,6 +5,7 @@ import { AlertBanner } from './components/AlertBanner'
 import { CpuPanel } from './components/CpuPanel'
 import { MemoryPanel } from './components/MemoryPanel'
 import { GpuPanel } from './components/GpuPanel'
+import { TemperaturePanel } from './components/TemperaturePanel'
 import { DiskPanel } from './components/DiskPanel'
 import { NetworkPanel } from './components/NetworkPanel'
 import { ProcessPanel } from './components/ProcessPanel'
@@ -68,6 +69,7 @@ function App(): JSX.Element {
             <CpuPanel />
             <MemoryPanel />
             <GpuPanel />
+            <TemperaturePanel />
             <DiskPanel />
             <NetworkPanel />
             <ProcessPanel />

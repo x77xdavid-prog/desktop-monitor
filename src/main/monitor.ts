@@ -1,4 +1,5 @@
 import si from 'systeminformation'
+import { runPwsh } from './pwsh'
 import type {
   StaticInfo,
   SystemStats,
@@ -7,7 +8,9 @@ import type {
   DiskStat,
   GpuStat,
   NetStat,
-  ProcessStat
+  ProcessStat,
+  ThermalInfo,
+  TempSensor
 } from '../shared/types'
 
 type Mode = 'active' | 'background'
@@ -41,11 +44,15 @@ export class SystemMonitor {
   private cachedGpus: GpuStat[] = []
   private cachedProcesses: ProcessStat = { all: 0, running: 0, topByCpu: [], topByMem: [] }
   private cachedBattery: SystemStats['battery'] = null
+  private cachedThermal: ThermalInfo = { zones: [], disks: [], cpuSource: 'none' }
 
-  // 폴링 주기 (ms). procEvery: 느린 틱 몇 회마다 프로세스 열거(0=중단)
-  private readonly RATES: Record<Mode, { fast: number; slow: number; procEvery: number }> = {
-    active: { fast: 1000, slow: 3000, procEvery: 2 }, // 프로세스 ~6초
-    background: { fast: 4000, slow: 12000, procEvery: 0 } // 숨김 시 대폭 감속 + 프로세스 중단
+  // 폴링 주기 (ms). procEvery/thermalEvery: 느린 틱 N회마다 수집(0=중단)
+  private readonly RATES: Record<
+    Mode,
+    { fast: number; slow: number; procEvery: number; thermalEvery: number }
+  > = {
+    active: { fast: 1000, slow: 3000, procEvery: 2, thermalEvery: 3 }, // 프로세스 ~6초, 온도 ~9초
+    background: { fast: 4000, slow: 12000, procEvery: 0, thermalEvery: 1 } // 숨김 시 온도만 12초
   }
 
   /** 정적 시스템 정보 (1회 조회) */
@@ -141,11 +148,20 @@ export class SystemMonitor {
         this.collectNet()
       ])
 
+      // CPU 온도: 센서(si) 우선, 없으면 ACPI 열 존(무권한)으로 대체
+      const sensorTemp = this.cachedCpuExtra.temperature
+      const zoneMax = this.cachedThermal.zones.length
+        ? Math.max(...this.cachedThermal.zones.map((z) => z.temp))
+        : null
+      const cpuTemp = sensorTemp ?? zoneMax
+      const cpuSource: ThermalInfo['cpuSource'] =
+        sensorTemp != null ? 'sensor' : zoneMax != null ? 'zone' : 'none'
+
       const cpu: CpuStat = {
         load: cpuLoad.load,
         perCore: cpuLoad.perCore,
         speed: this.cachedCpuExtra.speed,
-        temperature: this.cachedCpuExtra.temperature
+        temperature: cpuTemp
       }
 
       this.emit({
@@ -157,6 +173,7 @@ export class SystemMonitor {
         net,
         processes: this.cachedProcesses,
         uptime: si.time().uptime ?? 0,
+        thermal: { ...this.cachedThermal, cpuSource },
         battery: this.cachedBattery
       })
     } catch (err) {
@@ -185,8 +202,36 @@ export class SystemMonitor {
       if (r.procEvery > 0 && this.slowCount % r.procEvery === 0) {
         this.cachedProcesses = await this.collectProcesses()
       }
+
+      // 온도(열 존 + 디스크 SMART) - 변화가 느리므로 더 낮은 빈도
+      if (r.thermalEvery > 0 && this.slowCount % r.thermalEvery === 0) {
+        this.cachedThermal = await this.collectThermal()
+      }
     } catch (err) {
       console.error('[monitor] slow tick 실패:', err)
+    }
+  }
+
+  // ACPI 열 존(무권한) + 디스크 SMART(관리자 시) 온도 수집
+  private async collectThermal(): Promise<ThermalInfo> {
+    const script = `
+$zones=@()
+try { Get-CimInstance -ClassName Win32_PerfFormattedData_Counters_ThermalZoneInformation -ErrorAction Stop | Where-Object { $_.Temperature -gt 200 -and $_.Temperature -lt 400 } | ForEach-Object { $zones += [pscustomobject]@{ name=[string]$_.Name; temp=[math]::Round($_.Temperature-273.15,1) } } } catch {}
+$disks=@()
+try { Get-PhysicalDisk -ErrorAction Stop | ForEach-Object { $rc=$_ | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue; if($rc -and $rc.Temperature -gt 0){ $disks += [pscustomobject]@{ name=[string]$_.FriendlyName; temp=[double]$rc.Temperature } } } } catch {}
+[pscustomobject]@{ zones=@($zones); disks=@($disks) } | ConvertTo-Json -Compress -Depth 4
+`
+    try {
+      const out = (await runPwsh(script, 15_000)).trim()
+      if (!out) return this.cachedThermal
+      const parsed = JSON.parse(out) as { zones?: unknown; disks?: unknown }
+      return {
+        zones: normalizeSensors(parsed.zones),
+        disks: normalizeSensors(parsed.disks),
+        cpuSource: 'none'
+      }
+    } catch {
+      return this.cachedThermal // 실패 시 마지막 값 유지
     }
   }
 
@@ -323,6 +368,23 @@ function numOrNull(n: number | null | undefined): number | null {
   if (n === null || n === undefined) return null
   if (!Number.isFinite(n) || n < 0) return null
   return n
+}
+
+// PowerShell JSON(단일 객체 또는 배열)을 TempSensor[]로 정규화
+function normalizeSensors(val: unknown): TempSensor[] {
+  if (!val) return []
+  const arr = Array.isArray(val) ? val : [val]
+  const out: TempSensor[] = []
+  for (const item of arr) {
+    if (item && typeof item === 'object' && 'temp' in item) {
+      const t = Number((item as { temp: unknown }).temp)
+      const name = String((item as { name?: unknown }).name ?? '')
+      if (Number.isFinite(t) && t > 0 && t < 150) {
+        out.push({ name, temp: Math.round(t * 10) / 10 })
+      }
+    }
+  }
+  return out
 }
 
 export const monitor = new SystemMonitor()

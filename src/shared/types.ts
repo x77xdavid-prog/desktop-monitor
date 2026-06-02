@@ -93,6 +93,17 @@ export interface ProcessStat {
   topByMem: ProcessInfo[]
 }
 
+export interface TempSensor {
+  name: string
+  temp: number // °C
+}
+
+export interface ThermalInfo {
+  zones: TempSensor[] // ACPI 열 존(시스템) - 무권한
+  disks: TempSensor[] // 디스크 SMART - 관리자 권한 필요
+  cpuSource: 'sensor' | 'zone' | 'none' // CPU 온도 출처
+}
+
 export interface SystemStats {
   timestamp: number
   cpu: CpuStat
@@ -102,6 +113,7 @@ export interface SystemStats {
   net: NetStat[]
   processes: ProcessStat
   uptime: number // seconds
+  thermal: ThermalInfo
   battery: {
     hasBattery: boolean
     percent: number
