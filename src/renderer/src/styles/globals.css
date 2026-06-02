@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================
+   테마 토큰: 라이트(화이트톤) 기본 + 다크
+   시각화 컬러는 두 테마에서 채도를 조정해 가독성 유지
+   ========================================================= */
+:root,
+:root.light {
+  --color-bg: #eef1f7;
+  --color-surface: #ffffff;
+  --color-surface-2: #f5f7fb;
+  --color-border: #e3e8f0;
+  --color-text: #141925;
+  --color-text-muted: #687288;
+
+  --color-cpu: #2f6bff;
+  --color-mem: #11b886;
+  --color-disk: #f5920b;
+  --color-gpu: #8b5cf6;
+  --color-net: #ef4d6b;
+
+  --color-ok: #11b886;
+  --color-warn: #f5920b;
+  --color-danger: #e23146;
+
+  --shadow-card: 0 1px 2px rgba(20, 25, 37, 0.04), 0 8px 24px rgba(20, 25, 37, 0.06);
+  --grid-line: rgba(20, 25, 37, 0.06);
+}
+
+:root.dark {
+  --color-bg: #0b0f1a;
+  --color-surface: #141a29;
+  --color-surface-2: #1b2233;
+  --color-border: #283349;
+  --color-text: #eef2fb;
+  --color-text-muted: #8d99b3;
+
+  --color-cpu: #5b8cff;
+  --color-mem: #2fd6a3;
+  --color-disk: #ffab38;
+  --color-gpu: #a78bfa;
+  --color-net: #ff6b86;
+
+  --color-ok: #2fd6a3;
+  --color-warn: #ffab38;
+  --color-danger: #ff5a72;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.35);
+  --grid-line: rgba(255, 255, 255, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family:
+    'Pretendard', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+  transition:
+    background-color 0.4s ease,
+    color 0.4s ease;
+}
+
+/* 부드러운 테마 전환 */
+.theme-transition * {
+  transition:
+    background-color 0.4s ease,
+    border-color 0.4s ease,
+    color 0.3s ease,
+    box-shadow 0.4s ease !important;
+}
+
+/* 스크롤바 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 8px;
+  border: 2px solid var(--color-bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* 숫자 등폭 표시 */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(226, 49, 70, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(226, 49, 70, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(226, 49, 70, 0);
+  }
+}
+.alert-pulse {
+  animation: pulse-ring 1.8s infinite;
+}
+
+@keyframes fade-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-in {
+  animation: fade-slide-in 0.25s ease both;
+}

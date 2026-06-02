@@ -1,0 +1,28 @@
+{
+  "include": [
+    "src/renderer/src/**/*",
+    "src/preload/*.d.ts",
+    "src/shared/**/*"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "noUnusedLocals": false,
+    "useDefineForClassFields": true,
+    "baseUrl": ".",
+    "paths": {
+      "@": ["src/renderer/src"],
+      "@/*": ["src/renderer/src/*"],
+      "@shared/*": ["src/shared/*"]
+    }
+  }
+}

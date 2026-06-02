@@ -1,0 +1,36 @@
+name: Release
+
+# v로 시작하는 태그를 푸시하면 Windows에서 빌드 후 GitHub Release로 발행한다.
+# 예: git tag v1.0.1 && git push origin v1.0.1
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: # 수동 실행도 허용
+
+permissions:
+  contents: write # 릴리스 생성/자산 업로드 권한
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build & publish to GitHub Release
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
