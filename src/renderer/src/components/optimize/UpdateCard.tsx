@@ -107,11 +107,17 @@ function Body({
         <div className="text-center space-y-3">
           <div className="flex items-center justify-center gap-2 text-gpu">
             <Sparkles size={20} />
-            <span className="text-[15px] font-bold">새 버전 v{newVersion} 사용 가능</span>
+            <span className="text-[15px] font-bold">새 버전 v{newVersion} 발견</span>
           </div>
-          <PrimaryButton onClick={onDownload}>
-            <DownloadCloud size={16} /> 다운로드 및 설치
-          </PrimaryButton>
+          <div className="flex items-center justify-center gap-2 text-text-muted text-[12px]">
+            <Loader2 size={14} className="animate-spin" /> 자동 다운로드 준비 중…
+          </div>
+          <button
+            onClick={onDownload}
+            className="text-[11px] text-text-muted hover:text-text underline"
+          >
+            바로 다운로드
+          </button>
         </div>
       )
 

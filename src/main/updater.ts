@@ -17,14 +17,16 @@ function emit(status: UpdateStatus): void {
 }
 
 /**
- * 자동 업데이트 초기화.
- * autoDownload=false → 사용자가 직접 '다운로드'를 눌러야 받는 "선택적" 업데이트.
+ * 자동 업데이트 초기화 (반자동).
+ * - autoDownload=true       → 새 버전 발견 시 자동으로 다운로드
+ * - autoInstallOnAppQuit=false → 설치(재시작)는 사용자가 '재시작하여 설치'를 눌러야만 진행
+ *   (앱을 닫아도 자동 설치되지 않음)
  */
 export function initUpdater(windowGetter: () => BrowserWindow | null): void {
   getWindow = windowGetter
 
-  autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = false
 
   autoUpdater.on('checking-for-update', () => emit({ state: 'checking' }))
   autoUpdater.on('update-available', (info) => emit({ state: 'available', version: info.version }))
