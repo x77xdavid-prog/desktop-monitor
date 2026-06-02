@@ -1,6 +1,6 @@
 appId: com.desktopmonitor.app
 productName: Desktop Monitor
-copyright: Copyright © 2026 Desktop Monitor
+copyright: Copyright © 2026 david choi
 directories:
   buildResources: build
   output: dist

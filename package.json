@@ -1,9 +1,9 @@
 {
   "name": "desktop-monitor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "실시간 데스크탑 성능 모니터링 대시보드",
   "main": "./out/main/index.js",
-  "author": "x77xdavid-prog",
+  "author": "david choi",
   "license": "MIT",
   "repository": {
     "type": "git",

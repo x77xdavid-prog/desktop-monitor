@@ -11,6 +11,7 @@ import { ProcessPanel } from './components/ProcessPanel'
 import { AlertLog } from './components/AlertLog'
 import { SettingsModal } from './components/SettingsModal'
 import { OptimizeView } from './components/optimize/OptimizeView'
+import { Footer } from './components/Footer'
 import { Toaster } from './components/ui/Toaster'
 import { useUpdate } from './hooks/useUpdate'
 
@@ -76,6 +77,8 @@ function App(): JSX.Element {
           <OptimizeView />
         )}
       </main>
+
+      <Footer />
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <Toaster />
