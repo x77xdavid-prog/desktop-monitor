@@ -1,5 +1,6 @@
 import si from 'systeminformation'
 import { runPwsh } from './pwsh'
+import { cpuLoadSampler } from './cpuLoad'
 import type {
   StaticInfo,
   SystemStats,
@@ -91,6 +92,7 @@ export class SystemMonitor {
 
   start(): void {
     if (this.fastTimer) return
+    cpuLoadSampler.start()
     void this.tickSlow()
     void this.tickFast()
     this.startTimers()
@@ -101,6 +103,7 @@ export class SystemMonitor {
     if (this.slowTimer) clearInterval(this.slowTimer)
     this.fastTimer = null
     this.slowTimer = null
+    cpuLoadSampler.stop()
   }
 
   /** 창 가시성에 따라 폴링 강도 조절 (트레이 숨김 시 background) */
@@ -236,10 +239,12 @@ try { Get-PhysicalDisk -ErrorAction Stop | ForEach-Object { $rc=$_ | Get-Storage
   }
 
   private async collectCpuLoad(): Promise<{ load: number; perCore: number[] }> {
-    const load = await si.currentLoad()
+    // os.cpus() 기반 si.currentLoad()는 일부 Windows 환경에서 항상 100%로
+    // 잘못 측정되는 문제가 있어, 성능 카운터 기반 샘플러를 사용한다.
+    const sample = cpuLoadSampler.read()
     return {
-      load: round(load.currentLoad),
-      perCore: load.cpus.map((c) => round(c.load))
+      load: round(sample.load),
+      perCore: sample.perCore.map((c) => round(c))
     }
   }
 
