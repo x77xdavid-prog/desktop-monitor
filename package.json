@@ -1,6 +1,6 @@
 {
   "name": "desktop-monitor",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "실시간 데스크탑 성능 모니터링 대시보드",
   "main": "./out/main/index.js",
   "author": "david choi",

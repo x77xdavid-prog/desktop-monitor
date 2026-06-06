@@ -34,6 +34,8 @@ interface CpuExtra {
 export class SystemMonitor {
   private fastTimer: NodeJS.Timeout | null = null
   private slowTimer: NodeJS.Timeout | null = null
+  private running = false
+  private epoch = 0
   private listeners = new Set<(stats: SystemStats) => void>()
   private mode: Mode = 'active'
   private slowCount = 0
@@ -49,10 +51,12 @@ export class SystemMonitor {
   // 폴링 주기 (ms). procEvery/thermalEvery: 느린 틱 N회마다 수집(0=중단)
   private readonly RATES: Record<
     Mode,
-    { fast: number; slow: number; procEvery: number; thermalEvery: number }
+    { fast: number; slow: number; procEvery: number; thermalEvery: number; gpuEvery: number }
   > = {
-    active: { fast: 1000, slow: 3000, procEvery: 2, thermalEvery: 3 }, // 프로세스 ~6초, 온도 ~9초
-    background: { fast: 4000, slow: 12000, procEvery: 0, thermalEvery: 1 } // 숨김 시 온도만 12초
+    // 프로세스 ~6초, GPU ~9초, 온도 ~9초
+    active: { fast: 1000, slow: 3000, procEvery: 2, thermalEvery: 3, gpuEvery: 3 },
+    // 숨김 시: 프로세스 중단, GPU ~24초, 온도 12초
+    background: { fast: 4000, slow: 12000, procEvery: 0, thermalEvery: 1, gpuEvery: 2 }
   }
 
   /** 정적 시스템 정보 (1회 조회) */
@@ -90,15 +94,18 @@ export class SystemMonitor {
   }
 
   start(): void {
-    if (this.fastTimer) return
-    void this.tickSlow()
-    void this.tickFast()
-    this.startTimers()
+    if (this.running) return
+    this.running = true
+    const gen = ++this.epoch
+    void this.fastLoop(gen)
+    void this.slowLoop(gen)
   }
 
   stop(): void {
-    if (this.fastTimer) clearInterval(this.fastTimer)
-    if (this.slowTimer) clearInterval(this.slowTimer)
+    this.running = false
+    this.epoch++ // 진행 중인 루프 무효화 → 다음 틱 재예약 차단
+    if (this.fastTimer) clearTimeout(this.fastTimer)
+    if (this.slowTimer) clearTimeout(this.slowTimer)
     this.fastTimer = null
     this.slowTimer = null
   }
@@ -108,26 +115,32 @@ export class SystemMonitor {
     const next: Mode = active ? 'active' : 'background'
     if (next === this.mode) return
     this.mode = next
-    if (this.fastTimer) {
-      this.restartTimers()
-      // 활성 복귀 시 즉시 갱신
-      if (active) {
-        void this.tickSlow()
-        void this.tickFast()
-      }
-    }
+    if (!this.running) return
+    // 새 주기로 루프 재시작 (기존 세대 루프는 epoch 불일치로 스스로 종료 → 중복 루프 방지)
+    const gen = ++this.epoch
+    if (this.fastTimer) clearTimeout(this.fastTimer)
+    if (this.slowTimer) clearTimeout(this.slowTimer)
+    void this.fastLoop(gen)
+    void this.slowLoop(gen)
   }
 
-  private startTimers(): void {
-    const r = this.RATES[this.mode]
-    this.fastTimer = setInterval(() => void this.tickFast(), r.fast)
-    this.slowTimer = setInterval(() => void this.tickSlow(), r.slow)
+  /**
+   * 자기 예약(self-scheduling) 루프: 이전 틱이 "끝난 뒤에만" 다음 틱을 예약한다.
+   * setInterval과 달리, 비동기 수집이 주기를 초과해도 틱이 겹쳐 쌓이지 않아
+   * 프로세스 폭주(CPU 100%)를 구조적으로 차단한다.
+   */
+  private async fastLoop(gen: number): Promise<void> {
+    if (!this.running || gen !== this.epoch) return
+    await this.tickFast()
+    if (!this.running || gen !== this.epoch) return
+    this.fastTimer = setTimeout(() => void this.fastLoop(gen), this.RATES[this.mode].fast)
   }
 
-  private restartTimers(): void {
-    if (this.fastTimer) clearInterval(this.fastTimer)
-    if (this.slowTimer) clearInterval(this.slowTimer)
-    this.startTimers()
+  private async slowLoop(gen: number): Promise<void> {
+    if (!this.running || gen !== this.epoch) return
+    await this.tickSlow()
+    if (!this.running || gen !== this.epoch) return
+    this.slowTimer = setTimeout(() => void this.slowLoop(gen), this.RATES[this.mode].slow)
   }
 
   onUpdate(cb: (stats: SystemStats) => void): () => void {
@@ -187,16 +200,20 @@ export class SystemMonitor {
       const r = this.RATES[this.mode]
       this.slowCount++
 
-      const [extra, disk, gpus, battery] = await Promise.all([
+      // 가벼운 메트릭은 매 느린 틱마다 수집
+      const [extra, disk, battery] = await Promise.all([
         this.collectCpuExtra(),
         this.collectDisk(),
-        this.collectGpu(),
         this.collectBattery()
       ])
       this.cachedCpuExtra = extra
       this.cachedDisk = disk
-      this.cachedGpus = gpus
       this.cachedBattery = battery
+
+      // GPU 열거(nvidia-smi execSync 등 무거움)는 더 낮은 빈도로
+      if (r.gpuEvery > 0 && this.slowCount % r.gpuEvery === 0) {
+        this.cachedGpus = await this.collectGpu()
+      }
 
       // 프로세스 열거는 가장 무거우므로 활성 모드에서만, 일정 간격으로
       if (r.procEvery > 0 && this.slowCount % r.procEvery === 0) {
@@ -222,7 +239,7 @@ try { Get-PhysicalDisk -ErrorAction Stop | ForEach-Object { $rc=$_ | Get-Storage
 [pscustomobject]@{ zones=@($zones); disks=@($disks) } | ConvertTo-Json -Compress -Depth 4
 `
     try {
-      const out = (await runPwsh(script, 15_000)).trim()
+      const out = (await runPwsh(script, 6_000)).trim()
       if (!out) return this.cachedThermal
       const parsed = JSON.parse(out) as { zones?: unknown; disks?: unknown }
       return {
@@ -266,10 +283,12 @@ try { Get-PhysicalDisk -ErrorAction Stop | ForEach-Object { $rc=$_ | Get-Storage
     }
   }
 
+  // 기본(활성 경로) 인터페이스만 조회한다. '*'(전체 열거)는 Windows에서
+  // 인터페이스 N개당 1+2N개의 PowerShell/WMI 프로세스를 매초 띄워 CPU 폭주의 주원인이었다.
   private async collectNet(): Promise<NetStat[]> {
-    const stats = await si.networkStats('*').catch(() => [])
+    const stats = await si.networkStats().catch(() => [])
     return stats
-      .filter((s) => s.operstate === 'up' || s.rx_sec > 0 || s.tx_sec > 0)
+      .filter((s) => Boolean(s.iface))
       .map((s) => ({
         iface: s.iface,
         rxSpeed: Math.max(0, s.rx_sec || 0),
